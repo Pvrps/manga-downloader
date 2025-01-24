@@ -1,0 +1,1 @@
+[![Docker Build and Publish](https://github.com/PurpleDxD/manga-downloader/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/PurpleDxD/manga-downloader/actions/workflows/docker-publish.yml)

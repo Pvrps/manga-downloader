@@ -1,0 +1,46 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "java",
+            "name": "Maven",
+            "request": "attach",
+            "hostName": "localhost",
+            "port": 8000
+        },
+        {
+            "type": "java",
+            "name": "Surefire",
+            "request": "attach",
+            "hostName": "localhost",
+            "port": 5005
+        },
+        {
+            "type": "java",
+            "name": "No Args",
+            "request": "launch",
+            "mainClass": "ca.purps.mangadownloader.Main",
+            "projectName": "manga_downloader",
+            "args": ""
+        },
+        {
+            "type": "java",
+            "name": "Series",
+            "request": "launch",
+            "mainClass": "ca.purps.mangadownloader.Main",
+            "projectName": "manga_downloader",
+            "args": "https://bato.to/series/81946 C:/users/purps/desktop/bingbong --venv C:/Users/Purps/ONEDRI~1/Sync/development/tools/kcc/.venv"
+        },
+        {
+            "type": "java",
+            "name": "Chapter",
+            "request": "launch",
+            "mainClass": "ca.purps.mangadownloader.Main",
+            "projectName": "manga_downloader",
+            "args": "https://bato.to/chapter/1594221 C:/users/purps/desktop/bingbong --venv C:/Users/Purps/ONEDRI~1/Sync/development/tools/kcc/.venv"
+        }
+    ]
+}

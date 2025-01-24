@@ -1,0 +1,11 @@
+<suite name="unit-suite">
+    <test name="MangaDownloader Test">
+        <parameter name="cleanup" value="true" />
+        <parameter name="mockScraper" value="true" />
+        <parameter name="mockDownloader" value="true" />
+        <parameter name="mockTracker" value="true" />
+        <classes>
+            <class name="ca.purps.mangadownloader.MangaDownloaderTest" />
+        </classes>
+    </test>
+</suite>
