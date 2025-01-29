@@ -49,10 +49,10 @@ public class MangaDownloaderTest {
     @Parameters({ "cleanup", "mockScraper", "mockDownloader", "mockTracker" })
     @BeforeClass
     public void beforeClass(
-            @Optional("false") boolean cleanup,
-            @Optional("false") boolean mockScraper,
-            @Optional("false") boolean mockDownloader,
-            @Optional("false") boolean mockTracker) throws ClassNotFoundException {
+            @Optional("true") boolean cleanup,
+            @Optional("true") boolean mockScraper,
+            @Optional("true") boolean mockDownloader,
+            @Optional("true") boolean mockTracker) throws ClassNotFoundException {
         this.cleanup = cleanup;
         this.mockScraper = mockScraper;
         this.mockDownloader = mockDownloader;
