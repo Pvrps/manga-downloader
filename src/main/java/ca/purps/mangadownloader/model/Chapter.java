@@ -20,7 +20,7 @@ public class Chapter implements MangaEntity {
     @NonNull
     private final String url;
     @NonNull
-    private final Integer id;
+    private final String id;
     @NonNull
     private final String name;
     @NonNull

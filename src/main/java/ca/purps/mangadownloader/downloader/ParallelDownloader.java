@@ -258,9 +258,9 @@ public class ParallelDownloader implements Downloader, AutoCloseable {
     }
 
     private String sanitize(String input) {
-        String sanitized = input.replaceAll("[^a-zA-Z0-9_-]", "_");
+        String sanitized = input.replaceAll("[^a-zA-Z0-9_]", "_");
         sanitized = sanitized.replaceAll("_+", "_");
-        sanitized = sanitized.replaceAll("^[._-]+|[._-]+$", "");
+        sanitized = sanitized.replaceAll("^_+|_+$", "");
         return sanitized;
     }
 

@@ -12,6 +12,7 @@ import java.util.stream.IntStream;
 
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
 
 import ca.purps.mangadownloader.config.AppConfig;
 import ca.purps.mangadownloader.exception.ScraperException;
@@ -26,37 +27,34 @@ import okhttp3.Response;
 
 @Slf4j
 @RequiredArgsConstructor
-public class BatotoScraper implements MangaScraper {
+public class KunMangaScraper implements MangaScraper {
 
     private final AppConfig config;
     private final OkHttpClient httpClient;
 
-    public static final String BASE_URL = "https://bato.to";
+    public static final String BASE_URL = "https://kunmanga.com/";
 
-    private static final Pattern SERIES_ID_PATTERN = Pattern.compile("subjectIid\\s*=\\s*(\\d+);");
-
-    private static final Pattern CHAPTER_NAME_PATTERN = Pattern.compile("local_text_epi\\s*=\\s*'([^']+)'");
-    private static final Pattern CHAPTER_ID_PATTERN = Pattern.compile("episodeIid\\s*=\\s*(\\d+);");
-
-    private static final Pattern IMAGE_VARIABLE_PATTERN = Pattern.compile("imgHttps\\s*=\\s*\\[(.*?)\\];");
-    private static final Pattern IMAGE_URL_PATTERN = Pattern.compile("\"(https://[^\"]+)\"");
+    private static final Pattern CHAPTER_NAME_PATTERN = Pattern.compile("\"chapter\":\"(chapter-[\\d\\-]+)\"");
+    private static final Pattern CHAPTER_ID_PATTERN = Pattern.compile("\"chapter\":\"chapter-([\\d\\-]+)\"");
 
     @Override
     public Series scrapeSeries(String url) {
-        BatotoScraper.log.info("Scraping series from URL: {}", url);
+        KunMangaScraper.log.info("Scraping series from URL: {}", url);
         Document doc = fetchPage(url);
 
-        BatotoScraper.log.debug("Extracting chapters from series page");
+        KunMangaScraper.log.debug("Extracting chapters from series page");
+
+        String coverUrl = findLargestResolution(extractSrcsetUrls(doc, "div.summary_image img"));
 
         List<Chapter> chapters = new ArrayList<>();
         Series series = Series.builder()
                 .url(url)
-                .id(extractSeriesId(doc))
+                .id(0)
                 .title(extractMetaTag(doc, "og:title"))
-                .description(extractMetaTag(doc, "description"))
-                .authors(extractElements(doc, "div.attr-item:has(b:contains(Authors:)) span a"))
-                .genres(extractElements(doc, "div.attr-item:has(b:contains(Genres:)) span *"))
-                .coverBytes(downloadCoverBytes(makeAbsoluteUrl(extractAttribute(doc, "div.attr-cover > img.shadow-6", "src"))))
+                .description(extractMetaTag(doc, "og:description"))
+                .authors(extractElements(doc, "div.author-content a"))
+                .genres(extractElements(doc, "div.genres-content a"))
+                .coverBytes(downloadCoverBytes(makeAbsoluteUrl(coverUrl)))
                 .status(extractStatus(doc))
                 .chapters(chapters)
                 .build();
@@ -66,23 +64,21 @@ public class BatotoScraper implements MangaScraper {
         chapters.addAll(IntStream.range(0, chapterUrls.size())
                 .mapToObj(i -> {
                     String chapterUrl = makeAbsoluteUrl(chapterUrls.get(chapterUrls.size() - 1 - i));
-                    BatotoScraper.log.debug("Found chapter URL: {}", chapterUrl);
+                    KunMangaScraper.log.debug("Found chapter URL: {}", chapterUrl);
                     Chapter chapter = scrapeChapter(series, chapterUrl, i);
                     return chapter;
                 })
                 .collect(Collectors.toList()));
 
-        BatotoScraper.log.info("Found {} chapters for series", chapters.size());
+        KunMangaScraper.log.info("Found {} chapters for series", chapters.size());
 
-        BatotoScraper.log.info("Successfully scraped series: {}", series.getTitle());
+        KunMangaScraper.log.info("Successfully scraped series: {}", series.getTitle());
         return series;
     }
 
-
     @Override
     public Chapter scrapeChapter(String url) {
-        Document doc = fetchPage(url);
-        Series series = scrapeSeries(extractHref(doc, "h3.nav-title a"));
+        Series series = scrapeSeries(url.replaceAll("/chapter-\\d+/?$", ""));
         return series.getChapters()
                 .stream()
                 .filter(chapter -> chapter.getUrl().equals(url))
@@ -91,22 +87,46 @@ public class BatotoScraper implements MangaScraper {
     }
 
     private Chapter scrapeChapter(Series series, String url, int index) {
-        BatotoScraper.log.info("Scraping chapter from URL: {}", url);
+        KunMangaScraper.log.info("Scraping chapter from URL: {}", url);
         Document doc = fetchPage(url);
 
         String chapterName = extractChapterName(doc);
-        List<String> imageUrls = extractImageUrls(doc);
+        List<String> imageUrls = extractImageUrls(doc, "wp-manga-chapter-img");
 
-        BatotoScraper.log.debug("Found {} images in chapter {}", imageUrls.size(), chapterName);
+        KunMangaScraper.log.debug("Found {} images in chapter {}", imageUrls.size(), chapterName);
         return Chapter.builder()
                 .series(series)
                 .url(url)
                 .id(extractChapterId(doc))
                 .name(chapterName)
-                .description(extractMetaTag(doc, "description"))
+                .description(extractMetaTag(doc, "og:description"))
                 .imageUrls(imageUrls)
                 .seriesIndex(index)
                 .build();
+    }
+
+    private String findLargestResolution(List<String> urls) {
+        Pattern pattern = Pattern.compile(".*-(\\d+)x(\\d+)\\.[a-zA-Z]+$");
+        String nonResolution = null;
+        String largestResolutionUrl = null;
+        int maxPixels = -1;
+
+        for (String url : urls) {
+            Matcher matcher = pattern.matcher(url);
+            if (matcher.find()) {
+                int width = Integer.parseInt(matcher.group(1));
+                int height = Integer.parseInt(matcher.group(2));
+                int pixelCount = width * height;
+                if (pixelCount > maxPixels) {
+                    maxPixels = pixelCount;
+                    largestResolutionUrl = url;
+                }
+            } else if (nonResolution == null) {
+                nonResolution = url; // First non-resolution file
+            }
+        }
+
+        return (nonResolution != null) ? nonResolution : largestResolutionUrl;
     }
 
     private String makeAbsoluteUrl(String url) {
@@ -119,15 +139,15 @@ public class BatotoScraper implements MangaScraper {
         if (url.startsWith("//")) {
             return "https:" + url;
         }
-        return BatotoScraper.BASE_URL + (url.startsWith("/") ? url : "/" + url);
+        return KunMangaScraper.BASE_URL + (url.startsWith("/") ? url : "/" + url);
     }
 
     private Document fetchPage(String url) {
-        BatotoScraper.log.debug("Fetching page: {}", url);
+        KunMangaScraper.log.debug("Fetching page: {}", url);
 
         try {
             String absoluteUrl = makeAbsoluteUrl(url);
-            BatotoScraper.log.debug("Making request to: {}", absoluteUrl);
+            KunMangaScraper.log.debug("Making request to: {}", absoluteUrl);
 
             Request request = new Request.Builder()
                     .url(absoluteUrl)
@@ -138,7 +158,7 @@ public class BatotoScraper implements MangaScraper {
                 if (!response.isSuccessful()) {
                     throw new ScraperException(String.format("Failed to fetch page: {} (Status code: {})", url, response.code()));
                 }
-                BatotoScraper.log.debug("Successfully fetched page: {} (Status code: {})", url, response.code());
+                KunMangaScraper.log.debug("Successfully fetched page: {} (Status code: {})", url, response.code());
                 return Jsoup.parse(response.body().string(), url);
             }
         } catch (IOException e) {
@@ -147,7 +167,7 @@ public class BatotoScraper implements MangaScraper {
     }
 
     private List<String> extractChapterUrls(Document doc) {
-        return doc.select("a.visited.chapt")
+        return doc.select("ul.version-chap li.wp-manga-chapter a")
                 .stream()
                 .map(e -> e.attr("href").trim())
                 .collect(Collectors.toList());
@@ -169,29 +189,38 @@ public class BatotoScraper implements MangaScraper {
         return doc.select(selector).attr(attr).trim();
     }
 
-    private Status extractStatus(Document doc) {
-        String status = doc.select("div.attr-item:has(b:contains(Status:)) span").text().toLowerCase();
-        return switch (status) {
-            case "ongoing" -> Status.ONGOING;
-            case "completed" -> Status.COMPLETED;
-            case "hiatus" -> Status.HIATUS;
-            case "cancelled" -> Status.CANCELLED;
-            default -> Status.UNKNOWN;
-        };
+    private List<String> extractSrcsetUrls(Document doc, String selector) {
+        String srcset = extractAttribute(doc, selector, "srcset");
+
+        return Arrays.stream(srcset.split(","))
+                .map(entry -> entry.trim().split(" ")[0])
+                .collect(Collectors.toList());
     }
 
-    private Integer extractSeriesId(Document doc) {
-        return extractScript(doc, "subjectIid")
-                .flatMap(script -> BatotoScraper.SERIES_ID_PATTERN.matcher(script)
-                        .results()
-                        .findFirst()
-                        .map(match -> Integer.valueOf(match.group(1).trim())))
-                .orElse(null);
+    private Status extractStatus(Document doc) {
+        Element statusHeading = doc.selectFirst("div.summary-heading h5");
+
+        if (statusHeading != null && statusHeading.text().trim().equalsIgnoreCase("Status")) {
+            Element statusContent = statusHeading.parent().nextElementSibling();
+
+            if (statusContent != null && statusContent.hasClass("summary-content")) {
+                return switch (statusContent.text().toLowerCase().trim()) {
+                    case "ongoing" -> Status.ONGOING;
+                    case "completed" -> Status.COMPLETED;
+                    case "hiatus" -> Status.HIATUS;
+                    case "cancelled" -> Status.CANCELLED;
+                    default -> Status.UNKNOWN;
+                };
+
+            }
+        }
+
+        return Status.UNKNOWN;
     }
 
     private String extractChapterId(Document doc) {
-        return extractScript(doc, "episodeIid")
-                .flatMap(script -> BatotoScraper.CHAPTER_ID_PATTERN.matcher(script)
+        return extractScript(doc, "query_vars")
+                .flatMap(script -> KunMangaScraper.CHAPTER_ID_PATTERN.matcher(script)
                         .results()
                         .findFirst()
                         .map(match -> match.group(1).trim()))
@@ -199,29 +228,19 @@ public class BatotoScraper implements MangaScraper {
     }
 
     private String extractChapterName(Document doc) {
-        return extractScript(doc, "local_text_epi")
-                .flatMap(script -> BatotoScraper.CHAPTER_NAME_PATTERN.matcher(script)
+        return extractScript(doc, "query_vars")
+                .flatMap(script -> KunMangaScraper.CHAPTER_NAME_PATTERN.matcher(script)
                         .results()
                         .findFirst()
                         .map(match -> match.group(1).trim()))
                 .orElse("Unknown Chapter");
     }
 
-    private String extractHref(Document doc, String selector) {
-        return makeAbsoluteUrl(doc.select(selector).attr("href").trim());
-    }
-
-    private List<String> extractImageUrls(Document doc) {
-        return extractScript(doc, "imgHttps")
-                .flatMap(script -> Optional.of(BatotoScraper.IMAGE_VARIABLE_PATTERN.matcher(script)))
-                .filter(Matcher::find)
-                .map(matcher -> matcher.group(1).split(","))
-                .map(urls -> Arrays.stream(urls)
-                        .map(BatotoScraper.IMAGE_URL_PATTERN::matcher)
-                        .filter(Matcher::find)
-                        .map(m -> m.group(1).trim())
-                        .collect(Collectors.toList()))
-                .orElse(List.of());
+    private List<String> extractImageUrls(Document doc, String className) {
+        return doc.select("img." + className)
+                .stream()
+                .map(imgElement -> imgElement.attr("src").trim())
+                .collect(Collectors.toList());
     }
 
     private Optional<String> extractScript(Document doc, String data) {
@@ -241,13 +260,13 @@ public class BatotoScraper implements MangaScraper {
 
             try (Response response = httpClient.newCall(request).execute()) {
                 if (!response.isSuccessful()) {
-                    BatotoScraper.log.warn("Failed to download cover image: {} (Status code: {})", coverUrl, response.code());
+                    KunMangaScraper.log.warn("Failed to download cover image: {} (Status code: {})", coverUrl, response.code());
                     return null;
                 }
                 return response.body().bytes();
             }
         } catch (IOException e) {
-            BatotoScraper.log.error("Error downloading cover image: {}", coverUrl, e);
+            KunMangaScraper.log.error("Error downloading cover image: {}", coverUrl, e);
             return null;
         }
     }

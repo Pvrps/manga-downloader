@@ -6,6 +6,8 @@ import java.util.concurrent.Callable;
 import ca.purps.mangadownloader.config.AppConfig;
 import ca.purps.mangadownloader.downloader.ParallelDownloader;
 import ca.purps.mangadownloader.scraper.BatotoScraper;
+import ca.purps.mangadownloader.scraper.KunMangaScraper;
+import ca.purps.mangadownloader.scraper.MangaScraper;
 import ca.purps.mangadownloader.tracker.DownloadTracker;
 import okhttp3.OkHttpClient;
 import picocli.CommandLine;
@@ -38,8 +40,17 @@ public class Main implements Callable<Path> {
                 .build();
         OkHttpClient httpClient = new OkHttpClient();
 
+        MangaScraper scraper;
+        if (url.startsWith(BatotoScraper.BASE_URL)) {
+            scraper = new BatotoScraper(config, httpClient);
+        } else if (url.startsWith(KunMangaScraper.BASE_URL)) {
+            scraper = new KunMangaScraper(config, httpClient);
+        } else {
+            throw new IllegalArgumentException("Unsupported URL: " + url);
+        }
+
         try (MangaDownloader app = new MangaDownloader(
-                new BatotoScraper(config, httpClient),
+                scraper,
                 new ParallelDownloader(config, new DownloadTracker(config)))) {
 
             return app.download(url);
